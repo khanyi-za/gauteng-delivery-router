@@ -8,6 +8,12 @@ target/
 data/*
 !data/README.md
 
+### Personal design notes ###
+Why-Design.md
+
+### macOS ###
+.DS_Store
+
 ### STS ###
 .apt_generated
 .classpath
