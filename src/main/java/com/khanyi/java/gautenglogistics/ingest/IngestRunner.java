@@ -1,5 +1,6 @@
 package com.khanyi.java.gautenglogistics.ingest;
 
+import com.khanyi.java.gautenglogistics.geo.Coordinate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -7,13 +8,12 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.stereotype.Component;
 
-import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * Runs the road network ingester at startup when gautenglogistics.ingest.enabled=true.
- * For now it only reads the drivable roads and logs what it found.
+ * For now it builds the edges in memory and logs what it found.
  */
 @Component
 @ConditionalOnBooleanProperty("gautenglogistics.ingest.enabled")
@@ -29,20 +29,29 @@ class IngestRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
-        log.info("Reading drivable roads from {}", properties.osmFile().toAbsolutePath());
+        log.info("Ingesting road network from {}", properties.osmFile().toAbsolutePath());
         long start = System.nanoTime();
 
         List<DrivableWay> ways = new DrivableWayReader().read(properties.osmFile());
+        log.info("Pass 1: {} drivable ways ({} ms)", ways.size(), elapsedMs(start));
 
-        long nodeRefs = ways.stream().mapToLong(way -> way.nodeIds().length).sum();
-        long oneWay = ways.stream().filter(DrivableWay::oneWay).count();
-        Map<RoadClass, Integer> byClass = new EnumMap<>(RoadClass.class);
-        for (DrivableWay way : ways) {
-            byClass.merge(way.roadClass(), 1, Integer::sum);
-        }
+        Map<Long, Integer> nodeUses = EdgeBuilder.countNodeUses(ways);
+        long vertices = nodeUses.values().stream().filter(count -> count >= 2).count();
 
-        log.info("Read {} drivable ways ({} one-way, {} node references) in {} ms",
-                ways.size(), oneWay, nodeRefs, (System.nanoTime() - start) / 1_000_000);
-        byClass.forEach((roadClass, count) -> log.info("  {}: {}", roadClass.tag(), count));
+        Map<Long, Coordinate> coordinates = new NodeCoordinateReader().read(properties.osmFile(), nodeUses.keySet());
+        log.info("Pass 2: coordinates for {} of {} road nodes ({} ms)",
+                coordinates.size(), nodeUses.size(), elapsedMs(start));
+
+        List<RawEdge> edges = EdgeBuilder.buildEdges(ways, nodeUses, coordinates);
+        double totalKm = edges.stream().mapToDouble(RawEdge::lengthM).sum() / 1000;
+        log.info("Built {} directed edges between {} intersections, {} km of lanes ({} ms)",
+                edges.size(), vertices, Math.round(totalKm), elapsedMs(start));
+
+        Runtime runtime = Runtime.getRuntime();
+        log.info("Heap in use: {} MB", (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024));
+    }
+
+    private static long elapsedMs(long start) {
+        return (System.nanoTime() - start) / 1_000_000;
     }
 }
