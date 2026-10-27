@@ -12,8 +12,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Runs the road network ingester at startup when gautenglogistics.ingest.enabled=true.
- * For now it builds the edges in memory and logs what it found.
+ * Imports the road map when the app starts, if gautenglogistics.ingest.enabled=true:
+ * reads the OSM file, cuts the roads into pieces between intersections, keeps the biggest
+ * part where you can drive everywhere and back, and saves it to the database.
  */
 @Component
 @ConditionalOnBooleanProperty("gautenglogistics.ingest.enabled")
@@ -22,9 +23,11 @@ class IngestRunner implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(IngestRunner.class);
 
     private final IngestProperties properties;
+    private final RoadNetworkWriter writer;
 
-    IngestRunner(IngestProperties properties) {
+    IngestRunner(IngestProperties properties, RoadNetworkWriter writer) {
         this.properties = properties;
+        this.writer = writer;
     }
 
     @Override
@@ -36,19 +39,20 @@ class IngestRunner implements ApplicationRunner {
         log.info("Pass 1: {} drivable ways ({} ms)", ways.size(), elapsedMs(start));
 
         Map<Long, Integer> nodeUses = EdgeBuilder.countNodeUses(ways);
-        long vertices = nodeUses.values().stream().filter(count -> count >= 2).count();
-
         Map<Long, Coordinate> coordinates = new NodeCoordinateReader().read(properties.osmFile(), nodeUses.keySet());
         log.info("Pass 2: coordinates for {} of {} road nodes ({} ms)",
                 coordinates.size(), nodeUses.size(), elapsedMs(start));
 
         List<RawEdge> edges = EdgeBuilder.buildEdges(ways, nodeUses, coordinates);
-        double totalKm = edges.stream().mapToDouble(RawEdge::lengthM).sum() / 1000;
-        log.info("Built {} directed edges between {} intersections, {} km of lanes ({} ms)",
-                edges.size(), vertices, Math.round(totalKm), elapsedMs(start));
+        log.info("Built {} directed edges ({} ms)", edges.size(), elapsedMs(start));
 
-        Runtime runtime = Runtime.getRuntime();
-        log.info("Heap in use: {} MB", (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024));
+        List<RawEdge> kept = LargestComponentFilter.keepLargestComponent(edges);
+        double keptKm = kept.stream().mapToDouble(RawEdge::lengthM).sum() / 1000;
+        log.info("Largest strongly connected component: {} of {} edges, {} km of lanes ({} ms)",
+                kept.size(), edges.size(), Math.round(keptKm), elapsedMs(start));
+
+        int nodes = writer.replaceNetwork(kept, coordinates);
+        log.info("Saved {} nodes and {} edges to the database ({} ms)", nodes, kept.size(), elapsedMs(start));
     }
 
     private static long elapsedMs(long start) {
