@@ -1,5 +1,7 @@
 package com.khanyi.java.gautenglogistics.ingest;
 
+import com.khanyi.java.gautenglogistics.graph.RoadClass;
+
 /**
  * A directed road segment between two intersections, built from part of a {@link DrivableWay}.
  * It gets its database id later, once unreachable parts of the graph have been removed.

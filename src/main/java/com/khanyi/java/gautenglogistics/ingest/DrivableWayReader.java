@@ -1,5 +1,6 @@
 package com.khanyi.java.gautenglogistics.ingest;
 
+import com.khanyi.java.gautenglogistics.graph.RoadClass;
 import de.topobyte.osm4j.core.access.OsmIterator;
 import de.topobyte.osm4j.core.model.iface.EntityContainer;
 import de.topobyte.osm4j.core.model.iface.EntityType;

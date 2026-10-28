@@ -1,5 +1,6 @@
 package com.khanyi.java.gautenglogistics.ingest;
 
+import com.khanyi.java.gautenglogistics.graph.RoadClass;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;

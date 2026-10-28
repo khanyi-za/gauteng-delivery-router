@@ -1,5 +1,7 @@
 package com.khanyi.java.gautenglogistics.ingest;
 
+import com.khanyi.java.gautenglogistics.graph.RoadClass;
+
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;

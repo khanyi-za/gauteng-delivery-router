@@ -1,4 +1,4 @@
-package com.khanyi.java.gautenglogistics.ingest;
+package com.khanyi.java.gautenglogistics.graph;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -28,7 +28,9 @@ public enum RoadClass {
     LIVING_STREET("living_street", 20, true),
     SERVICE("service", 30, true);
 
-    /** Fastest speed any edge may have. A* relies on this to never overestimate travel time. */
+    /**
+     * Fastest speed any edge may have. A* relies on this to never overestimate travel time.
+     */
     public static final double MAX_SPEED_KMH = 120;
 
     private static final Map<String, RoadClass> BY_TAG = Arrays.stream(values())
@@ -48,7 +50,9 @@ public enum RoadClass {
         return Optional.ofNullable(BY_TAG.get(highway));
     }
 
-    /** The OSM highway tag value, e.g. "residential". */
+    /**
+     * The OSM highway tag value, e.g. "residential".
+     */
     public String tag() {
         return tag;
     }
@@ -57,7 +61,9 @@ public enum RoadClass {
         return defaultSpeedKmh;
     }
 
-    /** Whether stores and customers may snap to this road. False for motorways, trunk roads and their ramps. */
+    /**
+     * Whether stores and customers may snap to this road. False for motorways, trunk roads and their ramps.
+     */
     public boolean snappable() {
         return snappable;
     }

@@ -1,5 +1,7 @@
 package com.khanyi.java.gautenglogistics.ingest;
 
+import com.khanyi.java.gautenglogistics.graph.RoadClass;
+
 /**
  * A road from the OSM file that a delivery vehicle can use, before it is split into edges.
  * Node ids are always in the direction of travel for one-way roads.
