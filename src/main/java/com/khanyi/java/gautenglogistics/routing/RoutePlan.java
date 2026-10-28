@@ -11,7 +11,7 @@ import java.util.List;
  * @param start the intersection the start point was matched to
  * @param end   the intersection the end point was matched to
  * @param route the fastest route between them
- * @param path  the intersections along the way, in order, for drawing a rough line on a map
+ * @param path  the shape of the route along the real roads, from start to end
  */
 public record RoutePlan(Snap start, Snap end, Route route, List<Coordinate> path) {
 }

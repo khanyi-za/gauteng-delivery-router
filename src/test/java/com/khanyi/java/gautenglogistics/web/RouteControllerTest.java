@@ -45,6 +45,7 @@ class RouteControllerTest {
                 new Route(List.of(road), 600, 12_345, 99),
                 List.of(start.location(), end.location())));
 
+        // "geometry" is the path (-26.2, 28.0) -> (-26.1, 28.1) written as an encoded polyline
         assertThat(mvc.get().uri("/routes?fromLat=-26.2&fromLon=28.0&toLat=-26.1&toLon=28.1"))
                 .hasStatusOk()
                 .bodyJson()
@@ -56,7 +57,7 @@ class RouteControllerTest {
                           "end": {"nodeId": 2, "snapDistanceM": 5.0},
                           "roadSegments": 1,
                           "intersectionsVisited": 99,
-                          "path": [{"lat": -26.2, "lon": 28.0}, {"lat": -26.1, "lon": 28.1}]
+                          "geometry": "~d|~C_w{iD_pR_pR"
                         }""");
     }
 

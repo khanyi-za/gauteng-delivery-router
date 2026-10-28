@@ -2,10 +2,9 @@ package com.khanyi.java.gautenglogistics.web;
 
 
 import com.khanyi.java.gautenglogistics.geo.Coordinate;
+import com.khanyi.java.gautenglogistics.geo.PolylineEncoder;
 import com.khanyi.java.gautenglogistics.graph.Snap;
 import com.khanyi.java.gautenglogistics.routing.RoutePlan;
-
-import java.util.List;
 
 /**
  * What GET /routes sends back, as JSON.
@@ -16,10 +15,11 @@ import java.util.List;
  * @param end                  where the route ends on the road map
  * @param roadSegments         how many road pieces the route uses
  * @param intersectionsVisited how many intersections the search looked at
- * @param path                 the intersections along the way, for drawing a rough line on a map
+ * @param geometry             the shape of the route along the real roads, as an encoded polyline
+ *                             (the map page decodes it to draw the route)
  */
 public record RouteResponse(double distanceKm, double durationMinutes, SnappedPoint start, SnappedPoint end,
-                            int roadSegments, int intersectionsVisited, List<Coordinate> path) {
+                            int roadSegments, int intersectionsVisited, String geometry) {
 
     /**
      * @param nodeId        the OSM id of the intersection
@@ -41,7 +41,7 @@ public record RouteResponse(double distanceKm, double durationMinutes, SnappedPo
                 SnappedPoint.from(plan.end()),
                 plan.route().edges().size(),
                 plan.route().nodesVisited(),
-                plan.path());
+                PolylineEncoder.encode(plan.path()));
     }
 
     private static double round(double value, int decimals) {
