@@ -7,6 +7,7 @@ import com.khanyi.java.gautenglogistics.graph.Edge;
 import com.khanyi.java.gautenglogistics.graph.EdgeGeometryLoader;
 import com.khanyi.java.gautenglogistics.graph.GridIndex;
 import com.khanyi.java.gautenglogistics.graph.RoadGraph;
+import com.khanyi.java.gautenglogistics.graph.RoadNode;
 import com.khanyi.java.gautenglogistics.graph.Snap;
 import org.springframework.stereotype.Service;
 
@@ -37,15 +38,18 @@ public class RouteService {
                 .orElseThrow(() -> new IllegalStateException(
                         "No route between intersections " + start.node().id() + " and " + end.node().id()));
 
-        return new RoutePlan(start, end, route, roadShape(start, route));
+        return new RoutePlan(start, end, route, roadShape(start.node(), route));
     }
 
-    /** Joins the real shapes of the route's road pieces into one line, from start to end. */
-    private List<Coordinate> roadShape(Snap start, Route route) {
+    /**
+     * Joins the real shapes of the route's road pieces into one line, from start to end.
+     * Store selection uses it too, to draw the delivery route.
+     */
+    List<Coordinate> roadShape(RoadNode start, Route route) {
         Map<Long, String> geometries = geometryLoader.load(route.edges().stream().map(Edge::id).toList());
 
         List<Coordinate> path = new ArrayList<>();
-        path.add(start.node().location());
+        path.add(start.location());
         for (Edge edge : route.edges()) {
             String geometry = geometries.get(edge.id());
             if (geometry == null) {

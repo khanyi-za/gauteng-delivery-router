@@ -44,7 +44,8 @@ public record RouteResponse(double distanceKm, double durationMinutes, SnappedPo
                 PolylineEncoder.encode(plan.path()));
     }
 
-    private static double round(double value, int decimals) {
+    /** Rounds to a number of decimal places, for friendlier JSON. */
+    static double round(double value, int decimals) {
         double scale = Math.pow(10, decimals);
         return Math.round(value * scale) / scale;
     }

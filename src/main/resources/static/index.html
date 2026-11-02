@@ -35,6 +35,14 @@
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
+    // Show the stores as purple dots, with their names when you hover over them
+    fetch('/stores')
+        .then(response => response.json())
+        .then(stores => stores.forEach(store =>
+            L.circleMarker(toLatLng(store.location), {radius: 7, color: '#6a1b9a', fillOpacity: 0.8})
+                .bindTooltip(store.name)
+                .addTo(map)));
+
     const hint = document.getElementById('hint');
     const result = document.getElementById('result');
     const error = document.getElementById('error');
