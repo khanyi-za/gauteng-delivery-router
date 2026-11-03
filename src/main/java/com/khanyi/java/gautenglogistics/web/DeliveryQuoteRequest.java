@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * What POST /delivery-quotes expects, as JSON. Example:
+ * What POST /delivery-quotes and POST /orders expect, as JSON. Example:
  * <pre>
  * {"lat": -26.1076, "lon": 28.0567, "items": [{"sku": "SNEAKER-WHT-8", "quantity": 1}]}
  * </pre>

@@ -10,4 +10,7 @@ public interface StoreStockRepository extends JpaRepository<StoreStock, Long> {
 
     /** Every store's stock of these products. Spring Data writes the query from the method name. */
     List<StoreStock> findBySkuIn(Collection<String> skus);
+
+    /** One store's stock of these products. */
+    List<StoreStock> findByStoreIdAndSkuIn(Long storeId, Collection<String> skus);
 }
