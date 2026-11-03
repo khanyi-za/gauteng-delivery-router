@@ -23,6 +23,9 @@ public class Driver {
     /** When they're next back at the store, ready for another delivery. */
     private Instant freeAt;
 
+    // The order from their latest trip, or empty if they haven't made one. A plain id, like storeId
+    private Long latestOrderId;
+
     /** For JPA. */
     protected Driver() {
     }
@@ -49,7 +52,14 @@ public class Driver {
         return freeAt;
     }
 
-    public void setFreeAt(Instant freeAt) {
-        this.freeAt = freeAt;
+    /** The order from their latest trip. They're still on that trip until freeAt. */
+    public Long getLatestOrderId() {
+        return latestOrderId;
+    }
+
+    /** They leave the store with an order, and will be back at the given time. */
+    public void startTrip(Long orderId, Instant backAt) {
+        this.latestOrderId = orderId;
+        this.freeAt = backAt;
     }
 }

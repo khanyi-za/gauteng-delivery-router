@@ -94,7 +94,7 @@ public class Dispatcher {
             Driver driver = drivers.poll();
             Instant arrives = now.plusSeconds(Math.round(order.getDriveTimeS()));
             order.dispatch(driver, now, arrives);
-            driver.setFreeAt(arrives.plusSeconds(Math.round(driveBackS(order))));
+            driver.startTrip(order.getId(), arrives.plusSeconds(Math.round(driveBackS(order))));
             drivers.add(driver); // back in the queue, behind the drivers who'll be free sooner
 
             log.info("Order {} left {} with {}: arrives {}{}, driver back at {}", order.getId(),

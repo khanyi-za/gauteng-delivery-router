@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Runs against real Postgres, so it checks V5/V6 and that drivers and dispatched orders are saved
+ * Runs against real Postgres, so it checks V5 to V7 and that drivers and dispatched orders are saved
  * and read back correctly.
  */
 @Import(TestcontainersConfiguration.class)
@@ -75,5 +75,24 @@ class DispatchRepositoriesTest {
         assertThat(orderRepository.findByStatus(OrderStatus.ON_THE_WAY)).extracting(DeliveryOrder::getId).containsExactly(id);
         assertThat(orderRepository.findByStatus(OrderStatus.WAITING_FOR_DRIVER)).isEmpty();
         assertThat(orderRepository.findLatestTime()).contains(TOMORROW.plusSeconds(660)); // the delivery time
+    }
+
+    @Test
+    void aDriverRemembersTheirLatestOrderUntilItsDeleted() {
+        Store soweto = storeRepository.findAll().stream().filter(store -> store.getName().equals("Soweto")).findFirst().orElseThrow();
+        Driver driver = driverRepository.findAll().stream().filter(d -> d.getName().equals("Soweto driver 2")).findFirst().orElseThrow();
+        DeliveryOrder order = new DeliveryOrder(soweto, new Coordinate(-26.25, 27.9), List.of(new OrderItem("HAT-BUCKET", 1)),
+                TOMORROW, TOMORROW.plus(Duration.ofHours(3)), 600);
+        order.dispatch(driver, TOMORROW.plusSeconds(60), TOMORROW.plusSeconds(660)); // so the running dispatcher leaves it alone
+        Long id = orderRepository.save(order).getId();
+        driver.startTrip(id, driver.getFreeAt()); // same free time, so the driver isn't kept busy for other tests
+        driverRepository.save(driver);
+
+        assertThat(driverRepository.findById(driver.getId()).orElseThrow().getLatestOrderId()).isEqualTo(id);
+
+        orderRepository.deleteById(id);
+
+        // ON DELETE SET NULL in V7: the link is cleared instead of the delete failing
+        assertThat(driverRepository.findById(driver.getId()).orElseThrow().getLatestOrderId()).isNull();
     }
 }

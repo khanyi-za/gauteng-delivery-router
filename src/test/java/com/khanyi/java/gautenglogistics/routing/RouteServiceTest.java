@@ -15,6 +15,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
@@ -50,6 +51,22 @@ class RouteServiceTest {
         assertThat(plan.route().edges()).extracting(Edge::id).containsExactly(12L, 23L);
         // The bend is included, and MIDDLE appears once even though both pieces touch it
         assertThat(plan.path()).containsExactly(WEST.location(), BEND, MIDDLE.location(), EAST.location());
+    }
+
+    @Test
+    void aTimedPathSharesEachRoadPiecesTimeAlongItsShape() {
+        given(geometryLoader.load(any())).willReturn(Map.of(
+                12L, PolylineEncoder.encode(List.of(WEST.location(), BEND, MIDDLE.location())),
+                23L, PolylineEncoder.encode(List.of(MIDDLE.location(), EAST.location()))));
+
+        TimedPath path = service.timedPath(WEST.location(), EAST.location());
+
+        assertThat(path.durationS()).isEqualTo(120); // two road pieces of 60 seconds each
+        // The bend is halfway along the first piece, so it's reached halfway through its 60 seconds
+        assertThat(path.positionAt(30)).isEqualTo(BEND);
+        assertThat(path.positionAt(60)).isEqualTo(MIDDLE.location());
+        assertThat(path.positionAt(90).lon()).isCloseTo(28.015, within(1e-9));
+        assertThat(path.positionAt(120)).isEqualTo(EAST.location());
     }
 
     @Test

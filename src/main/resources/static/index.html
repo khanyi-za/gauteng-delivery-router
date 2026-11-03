@@ -27,6 +27,7 @@
     <p id="result"></p>
     <p id="error"></p>
     <button id="clear">Clear</button>
+    <p id="drivers"></p>
 </div>
 <script>
     const map = L.map('map').setView([-26.05, 28.1], 10);
@@ -101,6 +102,42 @@
         drawn = L.featureGroup([road, startGap, endGap]).addTo(map);
         map.fitBounds(drawn.getBounds(), {padding: [40, 40]});
     }
+
+    // Drivers out on the road: orange while taking an order to a customer, green on the way back.
+    // Drivers at their store aren't drawn, because they'd sit on top of the store's dot.
+    const driverColours = {DELIVERING: '#e65100', RETURNING: '#2e7d32'};
+    const driverMarkers = new Map(); // driver id -> their dot on the map
+    const driverSummary = document.getElementById('drivers');
+
+    async function showDrivers() {
+        const drivers = await (await fetch('/drivers')).json();
+        for (const driver of drivers) {
+            let marker = driverMarkers.get(driver.id);
+            if (driver.status === 'AT_STORE') {
+                if (marker) {
+                    marker.remove();
+                    driverMarkers.delete(driver.id);
+                }
+                continue;
+            }
+            const doing = driver.status === 'DELIVERING' ? 'taking' : 'heading back after';
+            const tooltip = `${driver.name}: ${doing} order ${driver.orderId}`;
+            if (!marker) {
+                marker = L.circleMarker(toLatLng(driver.location), {radius: 6, color: 'white', weight: 2, fillOpacity: 1})
+                    .bindTooltip(tooltip)
+                    .addTo(map);
+                driverMarkers.set(driver.id, marker);
+            }
+            marker.setLatLng(toLatLng(driver.location))
+                .setStyle({fillColor: driverColours[driver.status]})
+                .setTooltipContent(tooltip);
+        }
+        driverSummary.textContent = `${driverMarkers.size} of ${drivers.length} drivers out on the road`;
+    }
+
+    // Ask again every second, which is a minute of simulated time
+    showDrivers();
+    setInterval(showDrivers, 1000);
 
     function toLatLng(location) {
         return [location.lat, location.lon];

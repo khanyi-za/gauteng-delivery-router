@@ -72,6 +72,7 @@ class DispatcherTest {
         assertThat(order.getDeliveredAt()).isEqualTo(NOON.plusSeconds(60));
         // 1 minute there, then 3 minutes back the long way
         assertThat(driver.getFreeAt()).isEqualTo(NOON.plusSeconds(240));
+        assertThat(driver.getLatestOrderId()).isEqualTo(1L);
         assertThat(order.isLate()).isFalse();
     }
 
