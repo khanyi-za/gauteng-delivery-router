@@ -43,7 +43,7 @@ import static org.mockito.Mockito.verify;
  * check really happens. Choosing the store is pretend: it always picks Soweto.
  */
 @Import(TestcontainersConfiguration.class)
-@SpringBootTest
+@SpringBootTest(properties = "gautenglogistics.dispatch.enabled=false") // no drivers taking the test's orders
 class OrderPlacementTest {
 
     private static final Coordinate CUSTOMER = new Coordinate(-26.25, 27.9);
@@ -80,7 +80,7 @@ class OrderPlacementTest {
 
     @Test
     void theOrderIsSavedAndTheStockIsTaken() {
-        DeliveryOrder placed = orderService.place(CUSTOMER, Map.of(SCARF, 2));
+        DeliveryOrder placed = orderService.place(CUSTOMER, Map.of(SCARF, 2), false);
 
         assertThat(scarvesAtSoweto()).isEqualTo(3);
         DeliveryOrder saved = orderRepository.findById(placed.getId()).orElseThrow();
@@ -120,7 +120,7 @@ class OrderPlacementTest {
     /** The order, or the exception if it failed. */
     private Object placeScarfOrder() {
         try {
-            return orderService.place(CUSTOMER, Map.of(SCARF, 1));
+            return orderService.place(CUSTOMER, Map.of(SCARF, 1), false);
         } catch (RuntimeException e) {
             return e;
         }

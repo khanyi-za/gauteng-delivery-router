@@ -5,6 +5,7 @@ import com.khanyi.java.gautenglogistics.geo.Coordinate;
 import com.khanyi.java.gautenglogistics.order.OrderService;
 import com.khanyi.java.gautenglogistics.repository.DeliveryOrderRepository;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,10 +15,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.util.List;
 
 /**
  * POST /orders places an order: the stock is taken from the chosen store straight away.
- * GET /orders/{id} shows an order.
+ * GET /orders lists every order, newest first, and GET /orders/{id} shows one.
  */
 @RestController
 @RequestMapping("/orders")
@@ -34,8 +36,14 @@ class OrderController {
     /** Answers 201 Created, with a Location header saying where to find the new order. */
     @PostMapping
     ResponseEntity<OrderResponse> place(@Valid @RequestBody DeliveryQuoteRequest request) {
-        DeliveryOrder order = orderService.place(new Coordinate(request.lat(), request.lon()), request.quantitiesBySku());
+        DeliveryOrder order = orderService.place(new Coordinate(request.lat(), request.lon()),
+                request.quantitiesBySku(), request.isExpress());
         return ResponseEntity.created(URI.create("/orders/" + order.getId())).body(OrderResponse.from(order));
+    }
+
+    @GetMapping
+    List<OrderResponse> orders() {
+        return orderRepository.findAll(Sort.by(Sort.Direction.DESC, "id")).stream().map(OrderResponse::from).toList();
     }
 
     /** Answers 404 Not Found if there's no order with this id. */

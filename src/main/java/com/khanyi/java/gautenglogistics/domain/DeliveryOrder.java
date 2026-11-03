@@ -45,6 +45,14 @@ public class DeliveryOrder {
     @Column(name = "drive_time_s") // without this JPA would look for a column called drive_times
     private double driveTimeS;
 
+    // Empty until a driver takes the order
+    @ManyToOne
+    @JoinColumn(name = "driver_id")
+    private Driver driver;
+
+    private Instant dispatchedAt;
+    private Instant deliveredAt;
+
     // Always loaded with the order, because an order is never shown without what's in it
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "order_item", joinColumns = @JoinColumn(name = "order_id"))
@@ -99,7 +107,40 @@ public class DeliveryOrder {
         return driveTimeS;
     }
 
+
     public List<OrderItem> getItems() {
         return List.copyOf(items);
+    }
+
+    /** The driver who took the order, or null if it's still waiting for one. */
+    public Driver getDriver() {
+        return driver;
+    }
+
+    public Instant getDispatchedAt() {
+        return dispatchedAt;
+    }
+
+    /** When the driver reaches the customer (worked out when they leave), or null if not sent yet. */
+    public Instant getDeliveredAt() {
+        return deliveredAt;
+    }
+
+    /** True if the order reaches (or reached) the customer after the promised time. */
+    public boolean isLate() {
+        return deliveredAt != null && deliveredAt.isAfter(deliverBy);
+    }
+
+    /** A driver leaves the store with this order. */
+    public void dispatch(Driver driver, Instant leaves, Instant arrives) {
+        this.driver = driver;
+        this.dispatchedAt = leaves;
+        this.deliveredAt = arrives;
+        this.status = OrderStatus.ON_THE_WAY;
+    }
+
+    /** The driver has reached the customer. */
+    public void markDelivered() {
+        this.status = OrderStatus.DELIVERED;
     }
 }

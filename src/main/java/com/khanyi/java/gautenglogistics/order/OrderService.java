@@ -27,8 +27,11 @@ import java.util.Map;
 @Service
 public class OrderService {
 
-    /** Same-day delivery: every order must reach the customer within this long of being placed. */
-    static final Duration DELIVERY_WINDOW = Duration.ofHours(3);
+    /** Same-day delivery: an order must reach the customer within this long of being placed. */
+    static final Duration STANDARD_WINDOW = Duration.ofHours(3);
+
+    /** Express delivery, for customers who pay extra. Dispatch sends these first. */
+    static final Duration EXPRESS_WINDOW = Duration.ofHours(1);
 
     /** How many times to try when other orders keep taking the same stock at the same moment. */
     static final int MAX_ATTEMPTS = 3;
@@ -52,11 +55,12 @@ public class OrderService {
     /**
      * @param customer where the order is going
      * @param items    how many of each product, by product code
+     * @param express  true for express delivery (1 hour instead of 3)
      */
-    public DeliveryOrder place(Coordinate customer, Map<String, Integer> items) {
+    public DeliveryOrder place(Coordinate customer, Map<String, Integer> items, boolean express) {
         for (int attempt = 1; ; attempt++) {
             try {
-                return transaction.execute(status -> placeOnce(customer, items));
+                return transaction.execute(status -> placeOnce(customer, items, express));
             } catch (OptimisticLockingFailureException e) {
                 // Another order changed the same stock between our reading it and saving it, so
                 // nothing was saved. Start again with fresh numbers: the store we chose may not
@@ -68,7 +72,7 @@ public class OrderService {
         }
     }
 
-    private DeliveryOrder placeOnce(Coordinate customer, Map<String, Integer> items) {
+    private DeliveryOrder placeOnce(Coordinate customer, Map<String, Integer> items, boolean express) {
         StoreChoice choice = storeSelectionService.choose(customer, items);
 
         for (StoreStock stock : stockRepository.findByStoreIdAndSkuIn(choice.store().getId(), items.keySet())) {
@@ -90,6 +94,6 @@ public class OrderService {
                 .map(item -> new OrderItem(item.getKey(), item.getValue()))
                 .toList();
         return orderRepository.save(new DeliveryOrder(choice.store(), customer, orderItems,
-                now, now.plus(DELIVERY_WINDOW), choice.route().travelTimeS()));
+                now, now.plus(express ? EXPRESS_WINDOW : STANDARD_WINDOW), choice.route().travelTimeS()));
     }
 }

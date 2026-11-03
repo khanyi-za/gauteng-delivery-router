@@ -72,7 +72,7 @@ class OrderServiceTest {
 
     @Test
     void takesTheStockAndSavesTheOrder() {
-        DeliveryOrder order = service.place(CUSTOMER, Map.of("HAT", 2, "BAG", 1));
+        DeliveryOrder order = service.place(CUSTOMER, Map.of("HAT", 2, "BAG", 1), false);
 
         assertThat(hats.getQuantity()).isEqualTo(3);
         assertThat(bags.getQuantity()).isEqualTo(1);
@@ -86,12 +86,19 @@ class OrderServiceTest {
     }
 
     @Test
+    void anExpressOrderMustArriveWithinAnHour() {
+        DeliveryOrder order = service.place(CUSTOMER, Map.of("HAT", 1), true);
+
+        assertThat(order.getDeliverBy()).isEqualTo(Instant.parse("2026-11-02T11:00:00Z"));
+    }
+
+    @Test
     void triesAgainWhenAnotherOrderTookTheSameStockFirst() {
         given(orderRepository.save(any()))
                 .willThrow(new ObjectOptimisticLockingFailureException(StoreStock.class, 1L))
                 .willAnswer(call -> call.getArgument(0));
 
-        DeliveryOrder order = service.place(CUSTOMER, Map.of("HAT", 1));
+        DeliveryOrder order = service.place(CUSTOMER, Map.of("HAT", 1), false);
 
         assertThat(order.getStore()).isEqualTo(sandton);
         verify(storeSelectionService, times(2)).choose(CUSTOMER, Map.of("HAT", 1)); // chosen again with fresh stock
@@ -101,14 +108,14 @@ class OrderServiceTest {
     void givesUpAfterThreeClashes() {
         given(orderRepository.save(any())).willThrow(new ObjectOptimisticLockingFailureException(StoreStock.class, 1L));
 
-        assertThatThrownBy(() -> service.place(CUSTOMER, Map.of("HAT", 1)))
+        assertThatThrownBy(() -> service.place(CUSTOMER, Map.of("HAT", 1), false))
                 .isInstanceOf(ObjectOptimisticLockingFailureException.class);
         verify(orderRepository, times(OrderService.MAX_ATTEMPTS)).save(any());
     }
 
     @Test
     void neverTakesMoreStockThanTheStoreHas() {
-        assertThatThrownBy(() -> service.place(CUSTOMER, Map.of("BAG", 3)))
+        assertThatThrownBy(() -> service.place(CUSTOMER, Map.of("BAG", 3), false))
                 .isInstanceOf(NoStoreHasStockException.class);
         assertThat(bags.getQuantity()).isEqualTo(2);
         verify(orderRepository, never()).save(any());
