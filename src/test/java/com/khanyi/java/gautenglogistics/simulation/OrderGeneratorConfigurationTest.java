@@ -13,7 +13,7 @@ import static org.mockito.Mockito.mock;
 
 /**
  * Starts a tiny Spring context with just the generator's configuration and pretend beans it needs,
- * to check the on/off switch.
+ * to check whether it starts running.
  */
 class OrderGeneratorConfigurationTest {
 
@@ -25,14 +25,17 @@ class OrderGeneratorConfigurationTest {
             .withPropertyValues("gautenglogistics.generator.interval=1h"); // so it doesn't run during the test
 
     @Test
-    void isOffUnlessSwitchedOn() {
-        runner.run(context -> assertThat(context).doesNotHaveBean(OrderGenerator.class));
+    void isThereButStoppedUnlessSwitchedOn() {
+        runner.run(context -> {
+            assertThat(context).hasSingleBean(OrderGenerator.class);
+            assertThat(context.getBean(OrderGenerator.class).isRunning()).isFalse();
+        });
     }
 
     @Test
-    void isOnWhenSwitchedOn() {
+    void startsRunningWhenSwitchedOn() {
         runner.withPropertyValues("gautenglogistics.generator.enabled=true")
-                .run(context -> assertThat(context).hasSingleBean(OrderGenerator.class));
+                .run(context -> assertThat(context.getBean(OrderGenerator.class).isRunning()).isTrue());
     }
 
     @Configuration(proxyBeanMethods = false)

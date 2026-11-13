@@ -13,4 +13,7 @@ public interface StoreStockRepository extends JpaRepository<StoreStock, Long> {
 
     /** One store's stock of these products. */
     List<StoreStock> findByStoreIdAndSkuIn(Long storeId, Collection<String> skus);
+
+    /** All of one store's stock, in product code order. */
+    List<StoreStock> findByStoreIdOrderBySku(Long storeId);
 }

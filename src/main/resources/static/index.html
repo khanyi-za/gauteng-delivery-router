@@ -8,26 +8,76 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         html, body, #map { height: 100%; margin: 0; }
-        body { font-family: system-ui, sans-serif; }
+        body { font-family: system-ui, sans-serif; font-size: 14px; }
         #panel {
-            position: absolute; top: 12px; right: 12px; z-index: 1000; width: 260px;
-            background: white; padding: 12px 14px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            position: absolute; top: 12px; right: 12px; bottom: 12px; z-index: 1000; width: 340px;
+            display: flex; flex-direction: column;
+            background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
         }
-        #panel h1 { font-size: 16px; margin: 0 0 6px; }
-        #panel p { margin: 6px 0; font-size: 14px; }
-        #error { color: #b00020; }
-        button { margin-top: 6px; }
+        #top { padding: 12px 14px 8px; border-bottom: 1px solid #ddd; }
+        #top h1 { font-size: 16px; margin: 0 0 6px; }
+        #top p { margin: 4px 0; color: #444; }
+        #tabs { display: flex; border-bottom: 1px solid #ddd; }
+        #tabs button {
+            flex: 1; padding: 8px; border: none; background: none; cursor: pointer; font: inherit;
+            border-bottom: 3px solid transparent;
+        }
+        #tabs button.active { border-bottom-color: #6a1b9a; font-weight: 600; }
+        .tab { display: none; padding: 10px 14px; overflow-y: auto; flex: 1; }
+        .tab.active { display: block; }
+        .tab p { margin: 6px 0; }
+        .error { color: #b00020; }
+        .product { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; }
+        .product input { width: 48px; }
+        button.action { margin: 8px 6px 0 0; padding: 6px 12px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 4px 3px; border-bottom: 1px solid #eee; vertical-align: top; }
+        tbody tr { cursor: pointer; }
+        tbody tr:hover, tbody tr.selected { background: #f3e5f5; }
+        .late { color: #b00020; font-weight: 600; }
+        .out-of-stock { color: #b00020; }
+        .stock td { padding: 1px 6px 1px 0; border: none; }
     </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="panel">
-    <h1>Gauteng Delivery Router</h1>
-    <p id="hint">Click the map to choose where the route starts.</p>
-    <p id="result"></p>
-    <p id="error"></p>
-    <button id="clear">Clear</button>
-    <p id="drivers"></p>
+    <div id="top">
+        <h1>Gauteng Delivery Router</h1>
+        <p id="clock"></p>
+        <p id="drivers"></p>
+        <label><input type="checkbox" id="generator"> Place random demo orders</label>
+    </div>
+    <div id="tabs">
+        <button data-tab="order" class="active">New order</button>
+        <button data-tab="orders">Orders</button>
+        <button data-tab="route">Route</button>
+    </div>
+
+    <div id="order" class="tab active">
+        <p id="order-hint">Click the map where the customer is.</p>
+        <div id="products"></div>
+        <p><label><input type="checkbox" id="express"> Express (deliver within 1 hour, not 3)</label></p>
+        <button class="action" id="quote">Get quote</button>
+        <button class="action" id="place">Place order</button>
+        <p id="order-result"></p>
+        <p id="order-error" class="error"></p>
+    </div>
+
+    <div id="orders" class="tab">
+        <p>Newest first. Click an order to see its route.</p>
+        <table>
+            <thead><tr><th>#</th><th>Store</th><th>Status</th><th>Deliver by</th></tr></thead>
+            <tbody id="order-rows"></tbody>
+        </table>
+    </div>
+
+    <div id="route" class="tab">
+        <p id="route-hint">Click the map to choose where the route starts.</p>
+        <p id="route-result"></p>
+        <p id="route-error" class="error"></p>
+        <button class="action" id="clear-route">Clear</button>
+    </div>
 </div>
 <script>
     const map = L.map('map').setView([-26.05, 28.1], 10);
@@ -36,72 +86,311 @@
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
-    // Show the stores as purple dots, with their names when you hover over them
-    fetch('/stores')
-        .then(response => response.json())
-        .then(stores => stores.forEach(store =>
-            L.circleMarker(toLatLng(store.location), {radius: 7, color: '#6a1b9a', fillOpacity: 0.8})
-                .bindTooltip(store.name)
-                .addTo(map)));
+    // ---- Things every tab uses ----
 
-    const hint = document.getElementById('hint');
-    const result = document.getElementById('result');
-    const error = document.getElementById('error');
+    let products = [];       // everything the retailer sells: [{sku, name}]
+    let drawn = null;        // the route drawn for the current tab, if any
 
-    let start = null;   // the start marker
-    let end = null;     // the end marker
-    let drawn = null;   // everything drawn for the current route
-
-    // First click sets the start, second click sets the end and asks for the route
-    map.on('click', e => {
-        if (!start) {
-            start = L.marker(e.latlng, {draggable: true, title: 'Start'}).addTo(map).on('dragend', showRoute);
-            hint.textContent = 'Now click where the route ends.';
-        } else if (!end) {
-            end = L.marker(e.latlng, {draggable: true, title: 'End'}).addTo(map).on('dragend', showRoute);
-            hint.textContent = 'Drag a pin to change the route, or press Clear to start again.';
-            showRoute();
+    // Sends a request and gives back the JSON. If the server says no, it throws an Error with the
+    // server's reason, which it sends as problem details: {"title": ..., "detail": ...}
+    async function api(path, options = {}) {
+        const response = await fetch(path, options);
+        // Some errors, like 404 Not Found, come with no JSON at all
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(body.detail || body.title || `The server answered ${response.status}`);
         }
-    });
+        return body;
+    }
 
-    document.getElementById('clear').addEventListener('click', () => {
-        [start, end, drawn].forEach(layer => layer && layer.remove());
-        start = end = drawn = null;
-        hint.textContent = 'Click the map to choose where the route starts.';
-        result.textContent = error.textContent = '';
-    });
+    function sendJson(method, body) {
+        return {method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)};
+    }
 
-    async function showRoute() {
-        if (!start || !end) {
-            return;
-        }
-        const from = start.getLatLng();
-        const to = end.getLatLng();
-        const response = await fetch(`/routes?fromLat=${from.lat}&fromLon=${from.lng}&toLat=${to.lat}&toLon=${to.lng}`);
-        const body = await response.json();
+    // Draws a route as a thick line, with dashed lines from the clicked points to where the route
+    // really starts and ends on the road, and zooms the map to it
+    function drawRoute(geometry, from, snappedFrom, snappedTo, to, colour) {
+        clearDrawn();
+        const road = L.polyline(decodePolyline(geometry), {color: colour, weight: 5});
+        const startGap = L.polyline([from, snappedFrom], {color: 'grey', dashArray: '4 6'});
+        const endGap = L.polyline([snappedTo, to], {color: 'grey', dashArray: '4 6'});
+        drawn = L.featureGroup([road, startGap, endGap]).addTo(map);
+        map.fitBounds(drawn.getBounds(), {padding: [40, 40]});
+    }
 
+    function clearDrawn() {
         if (drawn) {
             drawn.remove();
             drawn = null;
         }
-        if (!response.ok) {
-            // The API sends errors as problem details: {"title": ..., "detail": ...}
-            result.textContent = '';
-            error.textContent = body.detail || body.title;
+    }
+
+    // Simulated times come as UTC, e.g. "2026-11-13T12:20:00Z". Show them as Joburg time: 14:20
+    function joburgTime(instant) {
+        return new Date(instant).toLocaleTimeString('en-ZA',
+            {hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Johannesburg'});
+    }
+
+    function joburgDate(instant) {
+        return new Date(instant).toLocaleDateString('en-ZA',
+            {day: 'numeric', month: 'short', timeZone: 'Africa/Johannesburg'});
+    }
+
+    let simulatedNow = null; // the simulated time, from the last time the clock was asked
+
+    // The time, with the date in front if it isn't the simulated today: "12 Nov 21:26"
+    function joburgTimeAndDay(instant) {
+        const sameDay = simulatedNow && joburgDate(instant) === joburgDate(simulatedNow);
+        return sameDay ? joburgTime(instant) : `${joburgDate(instant)} ${joburgTime(instant)}`;
+    }
+
+    // ---- Tabs ----
+
+    let activeTab = 'order';
+    document.querySelectorAll('#tabs button').forEach(button => button.addEventListener('click', () => {
+        activeTab = button.dataset.tab;
+        document.querySelectorAll('#tabs button, .tab').forEach(element => element.classList.remove('active'));
+        button.classList.add('active');
+        document.getElementById(activeTab).classList.add('active');
+        // Each tab draws its own things, so start each one with a clean map
+        clearOrder();
+        clearRoute();
+        clearDrawn();
+        selectedOrderId = null;
+        if (activeTab === 'orders') {
+            showOrders();
+        }
+    }));
+
+    // A click on the map means something different on each tab
+    map.on('click', e => {
+        if (activeTab === 'order') {
+            setCustomer(e.latlng);
+        } else if (activeTab === 'route') {
+            addRoutePoint(e.latlng);
+        }
+    });
+
+    // ---- Stores: purple dots. Click one to see its stock ----
+
+    api('/stores').then(stores => stores.forEach(store =>
+        L.circleMarker(toLatLng(store.location), {radius: 7, color: '#6a1b9a', fillOpacity: 0.8})
+            .bindTooltip(store.name)
+            .bindPopup(() => stockPopup(store))
+            .addTo(map)));
+
+    // The popup appears straight away saying "Loading", then fills in when the stock arrives
+    function stockPopup(store) {
+        const element = document.createElement('div');
+        element.textContent = `${store.name}: loading stock...`;
+        api(`/stores/${store.id}/stock`).then(stock => {
+            // In the same order as the products list (by name), and 0 for anything the store never had
+            const rows = products.map(product => {
+                const quantity = stock.find(item => item.sku === product.sku)?.quantity ?? 0;
+                const style = quantity === 0 ? ' class="out-of-stock"' : '';
+                return `<tr${style}><td>${product.name}</td><td>${quantity}</td></tr>`;
+            });
+            element.innerHTML = `<strong>${store.name}</strong><table class="stock">${rows.join('')}</table>`;
+        });
+        return element;
+    }
+
+    // ---- New order: choose a customer and products, get a quote, place the order ----
+
+    const orderHint = document.getElementById('order-hint');
+    const orderResult = document.getElementById('order-result');
+    const orderError = document.getElementById('order-error');
+    let customer = null; // the customer's marker
+
+    // One number box per product, all starting at 0
+    api('/products').then(list => {
+        products = list;
+        document.getElementById('products').innerHTML = list.map(product =>
+            `<div class="product"><label for="qty-${product.sku}">${product.name}</label>`
+            + `<input type="number" id="qty-${product.sku}" min="0" max="20" value="0"></div>`).join('');
+    });
+
+    function setCustomer(latlng) {
+        if (customer) {
+            customer.setLatLng(latlng);
+        } else {
+            customer = L.marker(latlng, {draggable: true, title: 'Customer'}).addTo(map);
+        }
+        orderHint.textContent = 'Drag the pin to move the customer. Choose what they want below.';
+        orderResult.textContent = orderError.textContent = '';
+        clearDrawn();
+    }
+
+    // What the customer wants, in the shape POST /delivery-quotes and POST /orders expect
+    function orderRequest() {
+        const location = customer.getLatLng();
+        const items = products
+            .map(product => ({sku: product.sku, quantity: Number(document.getElementById(`qty-${product.sku}`).value)}))
+            .filter(item => item.quantity > 0);
+        return {lat: location.lat, lon: location.lng, items, express: document.getElementById('express').checked};
+    }
+
+    // Checks there's a customer and at least one product. Gives back the request, or null after
+    // saying what's missing
+    function readyOrderRequest() {
+        orderResult.textContent = orderError.textContent = '';
+        if (!customer) {
+            orderError.textContent = 'First click the map where the customer is.';
+            return null;
+        }
+        const request = orderRequest();
+        if (request.items.length === 0) {
+            orderError.textContent = 'Choose at least one product.';
+            return null;
+        }
+        return request;
+    }
+
+    document.getElementById('quote').addEventListener('click', async () => {
+        const request = readyOrderRequest();
+        if (!request) {
             return;
         }
+        try {
+            const quote = await api('/delivery-quotes', sendJson('POST', request));
+            const passedOver = quote.passedOver.length === 0 ? ''
+                : ` Closer stores without everything: ${quote.passedOver.join(', ')}.`;
+            orderResult.textContent = `${quote.store.name} would deliver it: ${quote.distanceKm} km, `
+                + `about ${Math.round(quote.durationMinutes)} min.${passedOver}`;
+            const at = customer.getLatLng();
+            drawRoute(quote.geometry, toLatLng(quote.store.location), toLatLng(quote.store.location),
+                toLatLng(quote.customer.location), at, '#6a1b9a');
+        } catch (e) {
+            clearDrawn();
+            orderError.textContent = e.message;
+        }
+    });
 
-        error.textContent = '';
-        result.textContent = `${body.distanceKm} km, about ${Math.round(body.durationMinutes)} min `
-            + `(searched ${body.intersectionsVisited.toLocaleString()} intersections)`;
+    document.getElementById('place').addEventListener('click', async () => {
+        const request = readyOrderRequest();
+        if (!request) {
+            return;
+        }
+        try {
+            const order = await api('/orders', sendJson('POST', request));
+            orderResult.textContent = `Order ${order.id} placed with ${order.store.name}. `
+                + `Deliver by ${joburgTime(order.deliverBy)}. Follow it on the Orders tab.`;
+            showOrders();
+        } catch (e) {
+            orderError.textContent = e.message;
+        }
+    });
 
-        const road = L.polyline(decodePolyline(body.geometry), {color: '#1565c0', weight: 5});
-        // Dashed lines from the clicked points to where the route really starts and ends
-        const startGap = L.polyline([from, toLatLng(body.start.location)], {color: 'grey', dashArray: '4 6'});
-        const endGap = L.polyline([toLatLng(body.end.location), to], {color: 'grey', dashArray: '4 6'});
-        drawn = L.featureGroup([road, startGap, endGap]).addTo(map);
-        map.fitBounds(drawn.getBounds(), {padding: [40, 40]});
+    function clearOrder() {
+        if (customer) {
+            customer.remove();
+            customer = null;
+        }
+        orderHint.textContent = 'Click the map where the customer is.';
+        orderResult.textContent = orderError.textContent = '';
     }
+
+    // ---- Orders: the list, kept up to date. Click one to see its route ----
+
+    const statusNames = {WAITING_FOR_DRIVER: 'Waiting for a driver', ON_THE_WAY: 'On the way', DELIVERED: 'Delivered'};
+    const orderRows = document.getElementById('order-rows');
+    let selectedOrderId = null;
+    let shownOrders = []; // the orders in the table, newest first
+
+    async function showOrders() {
+        shownOrders = (await api('/orders')).slice(0, 50);
+        orderRows.innerHTML = shownOrders.map(order => {
+            // "Sandton driver 1" is in Sandton's row already, so "driver 1" is enough
+            const driver = order.driver ? `<br>${order.driver.replace(`${order.store.name} `, '')}` : '';
+            const late = order.late ? ' <span class="late">late</span>' : '';
+            const express = isExpress(order) ? ' (express)' : '';
+            const selected = order.id === selectedOrderId ? ' class="selected"' : '';
+            return `<tr data-id="${order.id}"${selected}><td>${order.id}</td><td>${order.store.name}</td>`
+                + `<td>${statusNames[order.status]}${driver}</td>`
+                + `<td>${joburgTimeAndDay(order.deliverBy)}${express}${late}</td></tr>`;
+        }).join('');
+    }
+
+    // Express orders must arrive within 1 hour of being placed, standard ones within 3
+    function isExpress(order) {
+        return new Date(order.deliverBy) - new Date(order.placedAt) <= 60 * 60 * 1000;
+    }
+
+    orderRows.addEventListener('click', async e => {
+        const row = e.target.closest('tr');
+        if (!row) {
+            return;
+        }
+        selectedOrderId = Number(row.dataset.id);
+        const order = shownOrders.find(order => order.id === selectedOrderId);
+        showOrders();
+        // Draw the drive from the store to the customer, the same way the driver goes
+        const store = order.store.location;
+        const route = await api(`/routes?fromLat=${store.lat}&fromLon=${store.lon}`
+            + `&toLat=${order.customer.lat}&toLon=${order.customer.lon}`);
+        drawRoute(route.geometry, toLatLng(store), toLatLng(route.start.location),
+            toLatLng(route.end.location), toLatLng(order.customer), '#6a1b9a');
+        drawn.addLayer(L.marker(toLatLng(order.customer), {title: `Order ${order.id}`}));
+    });
+
+    // ---- Route: click two points to see the fastest route between them ----
+
+    const routeHint = document.getElementById('route-hint');
+    const routeResult = document.getElementById('route-result');
+    const routeError = document.getElementById('route-error');
+    let start = null; // the start marker
+    let end = null;   // the end marker
+
+    // First click sets the start, second click sets the end and asks for the route
+    function addRoutePoint(latlng) {
+        if (!start) {
+            start = L.marker(latlng, {draggable: true, title: 'Start'}).addTo(map).on('dragend', showRoute);
+            routeHint.textContent = 'Now click where the route ends.';
+        } else if (!end) {
+            end = L.marker(latlng, {draggable: true, title: 'End'}).addTo(map).on('dragend', showRoute);
+            routeHint.textContent = 'Drag a pin to change the route, or press Clear to start again.';
+            showRoute();
+        }
+    }
+
+    async function showRoute() {
+        const from = start.getLatLng();
+        const to = end.getLatLng();
+        try {
+            const route = await api(`/routes?fromLat=${from.lat}&fromLon=${from.lng}&toLat=${to.lat}&toLon=${to.lng}`);
+            routeError.textContent = '';
+            routeResult.textContent = `${route.distanceKm} km, about ${Math.round(route.durationMinutes)} min `
+                + `(searched ${route.intersectionsVisited.toLocaleString()} intersections)`;
+            drawRoute(route.geometry, from, toLatLng(route.start.location), toLatLng(route.end.location), to, '#1565c0');
+        } catch (e) {
+            clearDrawn();
+            routeResult.textContent = '';
+            routeError.textContent = e.message;
+        }
+    }
+
+    function clearRoute() {
+        [start, end].forEach(marker => marker && marker.remove());
+        start = end = null;
+        routeHint.textContent = 'Click the map to choose where the route starts.';
+        routeResult.textContent = routeError.textContent = '';
+    }
+
+    document.getElementById('clear-route').addEventListener('click', () => {
+        clearRoute();
+        clearDrawn();
+    });
+
+    // ---- Random demo orders: the switch at the top ----
+
+    const generatorSwitch = document.getElementById('generator');
+    api('/generator').then(state => generatorSwitch.checked = state.running);
+    generatorSwitch.addEventListener('change', async () => {
+        const state = await api('/generator', sendJson('PUT', {running: generatorSwitch.checked}));
+        generatorSwitch.checked = state.running;
+    });
+
+    // ---- Drivers and the clock, asked for again every second ----
 
     // Drivers out on the road: orange while taking an order to a customer, green on the way back.
     // Drivers at their store aren't drawn, because they'd sit on top of the store's dot.
@@ -110,7 +399,7 @@
     const driverSummary = document.getElementById('drivers');
 
     async function showDrivers() {
-        const drivers = await (await fetch('/drivers')).json();
+        const drivers = await api('/drivers');
         for (const driver of drivers) {
             let marker = driverMarkers.get(driver.id);
             if (driver.status === 'AT_STORE') {
@@ -121,7 +410,7 @@
                 continue;
             }
             const doing = driver.status === 'DELIVERING' ? 'taking' : 'heading back after';
-            const tooltip = `${driver.name}: ${doing} order ${driver.orderId}`;
+            const tooltip = `${driver.name}: ${doing} order ${driver.orderId}, back at ${joburgTime(driver.backAt)}`;
             if (!marker) {
                 marker = L.circleMarker(toLatLng(driver.location), {radius: 6, color: 'white', weight: 2, fillOpacity: 1})
                     .bindTooltip(tooltip)
@@ -135,9 +424,27 @@
         driverSummary.textContent = `${driverMarkers.size} of ${drivers.length} drivers out on the road`;
     }
 
-    // Ask again every second, which is a minute of simulated time
-    showDrivers();
-    setInterval(showDrivers, 1000);
+    const clock = document.getElementById('clock');
+
+    async function showClock() {
+        const now = await api('/clock');
+        simulatedNow = now.now;
+        clock.textContent = `Simulated time ${joburgDate(now.now)} ${joburgTime(now.now)} `
+            + `(${now.speed}× faster than real time)`;
+    }
+
+    // Every second is a minute of simulated time. The orders list only needs updating while it's shown
+    async function refresh() {
+        try {
+            await Promise.all([showDrivers(), showClock(), activeTab === 'orders' ? showOrders() : null]);
+        } catch (e) {
+            // Usually the app was stopped. Keep trying: it carries on by itself once the app is back
+            clock.textContent = 'Can\'t reach the server. Is the app running?';
+        }
+    }
+
+    refresh();
+    setInterval(refresh, 1000);
 
     function toLatLng(location) {
         return [location.lat, location.lon];

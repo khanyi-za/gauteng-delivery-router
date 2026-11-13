@@ -17,13 +17,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.random.RandomGenerator;
 import java.util.stream.Collectors;
 
 /**
  * Places made-up orders, the way customers would, so the live map has something to show without
  * anyone typing curl commands. Each customer is somewhere near a random store and wants one
- * product, or sometimes two.
+ * product, or sometimes two. It can be started and stopped while the app runs.
  */
 public class OrderGenerator {
 
@@ -40,6 +41,8 @@ public class OrderGenerator {
     private final ProductRepository productRepository;
     private final OrderGeneratorProperties properties;
     private final RandomGenerator random;
+    // Web requests change it while the scheduler's thread reads it, so it must be safe to share
+    private final AtomicBoolean running;
 
     OrderGenerator(OrderService orderService, StoreRepository storeRepository, ProductRepository productRepository,
                    OrderGeneratorProperties properties, RandomGenerator random) {
@@ -48,10 +51,23 @@ public class OrderGenerator {
         this.productRepository = productRepository;
         this.properties = properties;
         this.random = random;
+        this.running = new AtomicBoolean(properties.enabled());
+    }
+
+    public boolean isRunning() {
+        return running.get();
+    }
+
+    public void setRunning(boolean running) {
+        this.running.set(running);
+        log.info("Random orders {}", running ? "started" : "stopped");
     }
 
     @Scheduled(fixedDelayString = "${gautenglogistics.generator.interval}")
     void placeRandomOrder() {
+        if (!running.get()) {
+            return;
+        }
         List<Store> stores = storeRepository.findAll();
         List<String> skus = productRepository.findAll().stream().map(Product::getSku).toList();
         if (stores.isEmpty() || skus.isEmpty()) {

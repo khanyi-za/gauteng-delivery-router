@@ -102,6 +102,27 @@ class OrderGeneratorTest {
     }
 
     @Test
+    void placesNothingWhileStopped() {
+        generator.setRunning(false);
+
+        generator.placeRandomOrder();
+
+        verifyNoInteractions(orderService);
+    }
+
+    @Test
+    void canBeStartedAgain() {
+        given(orderService.place(any(), any(), anyBoolean())).willReturn(anyOrder());
+        generator.setRunning(false);
+        generator.setRunning(true);
+
+        generator.placeRandomOrder();
+
+        assertThat(generator.isRunning()).isTrue();
+        verify(orderService).place(any(), any(), anyBoolean());
+    }
+
+    @Test
     void aPointNorthIsTheRightDistanceAway() {
         Coordinate north = OrderGenerator.pointNear(SANDTON, 1_000, 0);
 

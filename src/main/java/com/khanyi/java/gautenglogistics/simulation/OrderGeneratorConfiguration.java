@@ -3,7 +3,6 @@ package com.khanyi.java.gautenglogistics.simulation;
 import com.khanyi.java.gautenglogistics.order.OrderService;
 import com.khanyi.java.gautenglogistics.repository.ProductRepository;
 import com.khanyi.java.gautenglogistics.repository.StoreRepository;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -11,12 +10,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import java.util.random.RandomGenerator;
 
 /**
- * Creates the order generator, only when gautenglogistics.generator.enabled=true. It's off by
- * default, so tests and normal runs only get the orders someone places.
+ * Creates the order generator. It's always there, so the map page can start it, but it only places
+ * orders while it's running, and it starts stopped unless gautenglogistics.generator.enabled=true.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
-@ConditionalOnBooleanProperty("gautenglogistics.generator.enabled")
 class OrderGeneratorConfiguration {
 
     @Bean
