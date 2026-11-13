@@ -7,7 +7,7 @@ import com.khanyi.java.gautenglogistics.graph.GridIndex;
 import com.khanyi.java.gautenglogistics.graph.RoadGraph;
 import com.khanyi.java.gautenglogistics.repository.DeliveryOrderRepository;
 import com.khanyi.java.gautenglogistics.repository.DriverRepository;
-import com.khanyi.java.gautenglogistics.routing.Dijkstra;
+import com.khanyi.java.gautenglogistics.routing.AStar;
 import com.khanyi.java.gautenglogistics.routing.Route;
 
 import org.slf4j.Logger;
@@ -110,7 +110,7 @@ public class Dispatcher {
     private double driveBackS(DeliveryOrder order) {
         long customer = gridIndex.nearest(order.getCustomer()).orElseThrow().node().id();
         long store = gridIndex.nearest(order.getStore().getLocation()).orElseThrow().node().id();
-        return Dijkstra.fastestRoute(graph, customer, store).map(Route::travelTimeS).orElseThrow();
+        return AStar.fastestRoute(graph, customer, store).map(Route::travelTimeS).orElseThrow();
     }
 
     private static LocalTime localTime(Instant instant) {

@@ -88,7 +88,7 @@ public class RouteService {
 
     private Route fastestRoute(Snap start, Snap end) {
         // Can't happen on a graph where every intersection can reach every other, so it's a bug if it does
-        return Dijkstra.fastestRoute(graph, start.node().id(), end.node().id())
+        return AStar.fastestRoute(graph, start.node().id(), end.node().id())
                 .orElseThrow(() -> new IllegalStateException(
                         "No route between intersections " + start.node().id() + " and " + end.node().id()));
     }
